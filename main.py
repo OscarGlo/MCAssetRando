@@ -13,11 +13,11 @@ from PySide6.QtGui import QIcon
 import PySide6.QtCore as qc
 import PySide6.QtWidgets as qw
 
-from const import DEFAULT_TEXTURE_TYPES, TEXTURE_TYPES, DEFAULT_SOUND_TYPES, SOUND_TYPES, MODEL_TYPES, TEXT_TYPES, \
+from src.const import DEFAULT_TEXTURE_TYPES, TEXTURE_TYPES, DEFAULT_SOUND_TYPES, SOUND_TYPES, MODEL_TYPES, TEXT_TYPES, \
     DEFAULT_TEXT_TYPES, DEFAULT_MODEL_TYPES
-from include_list import IncludeList
-from util import transparency_amount, transfer_palette
-from versions import get_format, VERSIONS
+from src.include_list import IncludeList
+from src.util import transparency_amount, transfer_palette
+from src.versions import get_format, VERSIONS
 
 
 APP_VERSION = "1.0"
@@ -73,7 +73,7 @@ class Window(qw.QWidget):
 
         self.layout = qw.QVBoxLayout(self)
 
-        self.setWindowIcon(QIcon("./resources/icon.png"))
+        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "resources", "icon.png")))
         self.setWindowTitle(f"Minecraft Asset Randomizer {APP_VERSION}")
 
         # Randomizer options
@@ -496,7 +496,7 @@ class GenerateWorker(qc.QThread):
                     img.save(asset["path"])
 
         # Rename files
-        with zipfile.ZipFile(os.path.join("..", self.pack_name), "w") as pack:
+        with zipfile.ZipFile(os.path.join("", self.pack_name), "w") as pack:
             for (atype, subtype), group in assets.groupby(["type", "subtype"], dropna=False):
                 group_assets = list(group.iterrows())
                 self.step.emit(

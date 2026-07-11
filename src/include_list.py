@@ -24,7 +24,7 @@ class IncludeList(qw.QWidget):
         excluded_layout.addWidget(excluded_label)
 
         self.excluded_list = qw.QListWidget()
-        self.excluded_list.itemDoubleClicked.connect(self.include_item)
+        self.excluded_list.itemClicked.connect(self.include_item)
         self.excluded_list.setStyleSheet("color: gray")
         excluded_layout.addWidget(self.excluded_list)
 
@@ -32,12 +32,12 @@ class IncludeList(qw.QWidget):
         controls_layout = qw.QVBoxLayout(controls)
         layout.addWidget(controls, alignment=qc.Qt.AlignmentFlag.AlignCenter)
 
-        include_all = qw.QPushButton(">>")
+        include_all = qw.QPushButton("❱")
         include_all.setFixedSize(30, 30)
         include_all.clicked.connect(self.include_all_clicked)
         controls_layout.addWidget(include_all)
 
-        exclude_all = qw.QPushButton("<<")
+        exclude_all = qw.QPushButton("❰")
         exclude_all.setFixedSize(30, 30)
         exclude_all.clicked.connect(self.exclude_all_clicked)
         controls_layout.addWidget(exclude_all)
@@ -51,7 +51,7 @@ class IncludeList(qw.QWidget):
         included_layout.addWidget(included_label)
 
         self.included_list = qw.QListWidget()
-        self.included_list.itemDoubleClicked.connect(self.exclude_item)
+        self.included_list.itemClicked.connect(self.exclude_item)
         included_layout.addWidget(self.included_list)
 
         self.update_lists()
