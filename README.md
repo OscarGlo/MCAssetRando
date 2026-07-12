@@ -10,7 +10,7 @@ Download and run the `.exe` from the releases tab to the right of this page.
 
 ```commandline
 python -m pip install -r requirements.txt
-python src/main.py
+python main.py
 ```
 
 ## Building
