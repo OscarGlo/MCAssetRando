@@ -496,7 +496,7 @@ class GenerateWorker(qc.QThread):
                     img.save(asset["path"])
 
         # Rename files
-        with zipfile.ZipFile(os.path.join("", self.pack_name), "w") as pack:
+        with zipfile.ZipFile(os.path.join("..", self.pack_name), "w") as pack:
             for (atype, subtype), group in assets.groupby(["type", "subtype"], dropna=False):
                 group_assets = list(group.iterrows())
                 self.step.emit(
