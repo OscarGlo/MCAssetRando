@@ -1,4 +1,4 @@
-# Minecraft Asset Randomizer 1.0
+# Minecraft Asset Randomizer 1.1
 
 ## Running
 

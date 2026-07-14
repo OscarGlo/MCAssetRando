@@ -1,6 +1,5 @@
 # TODO
 
-* Restrain types in the UI
 * Parse .txt files (splashes)
 * Parse old .lang files
 * Randomize data packs

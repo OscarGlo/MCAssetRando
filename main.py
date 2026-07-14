@@ -19,7 +19,7 @@ from src.util import transparency_amount, transfer_palette
 from src.versions import get_format, VERSIONS
 
 
-APP_VERSION = "1.0"
+APP_VERSION = "1.1"
 
 ROOT = "assets/minecraft/"
 RE_TEXTURE = rf"{ROOT}textures/([a-z]+)/.*?\.png$"
