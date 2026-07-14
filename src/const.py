@@ -59,8 +59,11 @@ DEFAULT_LOCKED_SOUND_TYPES = [
 ]
 
 TEXT_TYPES = {
+    "English (Lolcat)": ["lol_us"],
+    "English (Pirate)": ["en_pt"],
     "English (US)": ["en_us"],
-    #"Splashes": ["splashes"]
+    "English (Upside down)": ["en_ud"],
+    "Splashes": ["splashes"]
 }
 
 MODEL_TYPES = {

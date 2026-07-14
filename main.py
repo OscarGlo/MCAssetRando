@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import re
 import shutil
 import sys
@@ -9,6 +10,7 @@ from zipfile import ZipFile
 
 import pandas as pd
 import requests
+from PIL import Image
 from PySide6.QtGui import QIcon
 import PySide6.QtCore as qc
 import PySide6.QtWidgets as qw
@@ -22,10 +24,10 @@ from src.versions import get_format, VERSIONS
 APP_VERSION = "1.1"
 
 ROOT = "assets/minecraft/"
-RE_TEXTURE = rf"{ROOT}textures/([a-z]+)/.*?\.png$"
-RE_MODEL = rf"{ROOT}models/([a-z]+)/.*?\.json$"
-RE_TEXT = rf"{ROOT}(?:lang/(en_us)\.json|texts/(splashes)\.txt)$"
-RE_SOUND = rf"{ROOT}sounds/([a-z]+)/.*?\.ogg$"
+RE_TEXTURE = rf"{ROOT}textures/(\w+)/.*?\.png$"
+RE_MODEL = rf"{ROOT}models/(\w+)/.*?\.json$"
+RE_TEXT = rf"{ROOT}(?:lang|texts)/(\w+)\.(?:lang|json|txt)$"
+RE_SOUND = rf"{ROOT}sounds/(\w+)/.*?\.ogg$"
 
 BLOCK_MODEL_BLACKLIST = [
     "block",
@@ -349,6 +351,7 @@ class GenerateWorker(qc.QThread):
             self.seed.emit(seed)
         else:
             seed = self.win.seed.value()
+        random.seed(seed)
         self.pack_name = f"pack_{version_str}_{seed}.zip"
 
         texture_types = [t for label in self.win.texture_types for t in TEXTURE_TYPES[label]]
@@ -393,8 +396,8 @@ class GenerateWorker(qc.QThread):
         ) -> bool:
             nonlocal assets
 
-            match = re.search(re_include, path)
-            if match and (re_exclude is None or not re.search(re_exclude, path)):
+            match = re.search(re_include, path, re.IGNORECASE)
+            if match and (re_exclude is None or not re.search(re_exclude, path, re.IGNORECASE)):
                 subtype = match.group(1)
                 if subtypes == True or (isinstance(subtypes, list) and subtype in subtypes):
                     if keep_subtypes == True or (isinstance(keep_subtypes, list) and subtype in keep_subtypes):
@@ -461,37 +464,70 @@ class GenerateWorker(qc.QThread):
         if text_types:
             self.step.emit(Step("Shuffling text..."))
 
-            translations = pd.DataFrame({
+            strings = pd.DataFrame({
                 "path": pd.Series(dtype=str),
                 "key": pd.Series(dtype=str),
                 "value": pd.Series(dtype=str),
                 "placeholders": pd.Series(dtype=int),
             })
-            for _, lang in assets[assets["path"].str.contains("lang")].iterrows():
+
+            # Read .json lang files
+            for _, lang in assets[(assets["type"] == "text") & assets["path"].str.endswith(".json")].iterrows():
                 path = lang["path"]
                 with open(path, encoding="utf-8") as f:
                     lang_ts = json.load(f)
 
                 df = pd.DataFrame({
                     "key": lang_ts.keys(),
-                    "value": lang_ts.values(),
+                    "value": [v.strip() for v in lang_ts.values()],
                 })
                 df["path"] = path
-                df["placeholders"] = df["value"].map(
-                    lambda v: len([m for m in re.findall(r"%(?:%|s|[0-9]+)", v) if m != "%%"])
-                )
-                translations = pd.concat([translations, df], ignore_index=True)
+                strings = pd.concat([strings, df], ignore_index=True)
 
-            if not translations.empty:
-                shuffled_ts = pd.concat(
+            # Read .lang lang files
+            for _, lang in assets[(assets["type"] == "text") & assets["path"].str.endswith(".lang")].iterrows():
+                path = lang["path"]
+                with open(path, encoding="utf-8") as f:
+                    lang_lines = f.readlines()
+
+                split = [l.split("=", 1) for l in lang_lines if "=" in l]
+
+                df = pd.DataFrame({
+                    "key": [s[0] for s in split],
+                    "value": [s[1].strip() for s in split]
+                })
+                df["path"] = path
+                strings = pd.concat([strings, df], ignore_index=True)
+
+            # Read .txt files
+            for _, lang in assets[(assets["type"] == "text") & assets["path"].str.endswith(".txt")].iterrows():
+                path = lang["path"]
+                with open(path, encoding="utf-8") as f:
+                    txt_lines = f.readlines()
+
+                df = pd.DataFrame({"value": [l.strip() for l in txt_lines]})
+                df["path"] = path
+                strings = pd.concat([strings, df], ignore_index=True)
+
+            strings["placeholders"] = strings["value"].map(
+                lambda v: len([m for m in re.findall(r"%(?:%|s|[0-9]+)", v) if m != "%%"])
+            )
+
+            if not strings.empty:
+                shuffled_values = pd.concat(
                     group.sample(frac=1, random_state=seed).reset_index().set_index(group.index)
-                    for _, group in translations.groupby("placeholders")
+                    for _, group in strings.groupby("placeholders")
                 )
-                translations["new_value"] = shuffled_ts["value"]
+                strings["new_value"] = shuffled_values["value"]
 
-                for path, content in translations.groupby("path"):
-                    with open(path, "w") as f:
-                        json.dump({ts["key"]: ts["new_value"] for _, ts in content.iterrows()}, f, indent=2)
+                for path, content in strings.groupby("path"):
+                    with open(path, "w", encoding="utf-8") as f:
+                        if path.endswith(".json"):
+                            json.dump({ts["key"]: ts["new_value"] for _, ts in content.iterrows()}, f, indent=2)
+                        elif path.endswith(".lang"):
+                            f.writelines([ts["key"] + "=" + ts["new_value"] + "\n" for _, ts in content.iterrows()])
+                        else:
+                            f.writelines([ts["new_value"] + "\n" for _, ts in content.iterrows()])
 
         # Shuffle assets
         self.step.emit(Step("Shuffling assets..."))
@@ -499,17 +535,14 @@ class GenerateWorker(qc.QThread):
         if self.win.match_transparency.isChecked():
             criterion.append("transparency")
 
-        if not assets.empty:
+        to_shuffle = assets[assets["type"] != "text"]
+        if not to_shuffle.empty:
             shuffled = pd.concat(
                 group.sample(frac=1, random_state=seed).reset_index().set_index(group.index)
-                for _, group in assets.groupby(criterion, dropna=False)
+                for _, group in to_shuffle.groupby(criterion, dropna=False)
             )
-            props = ["path"]
-            new_props = ["new_path"]
-
-            shuffled[new_props] = shuffled[props]
-
-            assets = assets.join(shuffled[new_props])
+            shuffled["new_path"] = shuffled["path"]
+            assets = assets.join(shuffled[["new_path"]])
 
         # Transfer palettes
         if self.win.keep_palette.isChecked():
@@ -542,7 +575,8 @@ class GenerateWorker(qc.QThread):
                         return
 
                     self.substep.emit(i)
-                    pack.write(asset["path"], asset["new_path"])
+                    target = asset["path"] if pd.isna(asset["new_path"]) else asset["new_path"]
+                    pack.write(asset["path"], target)
 
             fmt = get_format(version)
             meta = {
