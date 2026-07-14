@@ -13,8 +13,7 @@ from PySide6.QtGui import QIcon
 import PySide6.QtCore as qc
 import PySide6.QtWidgets as qw
 
-from src.const import DEFAULT_TEXTURE_TYPES, TEXTURE_TYPES, DEFAULT_SOUND_TYPES, SOUND_TYPES, MODEL_TYPES, TEXT_TYPES, \
-    DEFAULT_TEXT_TYPES, DEFAULT_MODEL_TYPES
+from src.const import DEFAULT_TEXTURE_TYPES, TEXTURE_TYPES, SOUND_TYPES, MODEL_TYPES, TEXT_TYPES, DEFAULT_LOCKED_SOUND_TYPES
 from src.include_list import IncludeList
 from src.util import transparency_amount, transfer_palette
 from src.versions import get_format, VERSIONS
@@ -86,6 +85,26 @@ class Window(qw.QWidget):
         self.layout.addWidget(options_scroll)
 
         self.global_options(options_layout)
+
+        type_help = qw.QWidget()
+        type_help_layout = qw.QHBoxLayout(type_help)
+        options_layout.addWidget(type_help)
+
+        type_help_icon = qw.QLabel(
+            pixmap=qw.QApplication.style().standardIcon(qw.QStyle.StandardPixmap.SP_MessageBoxInformation).pixmap(16, 16)
+        )
+        type_help_icon.setFixedWidth(20)
+        type_help_layout.addWidget(type_help_icon)
+        type_help_layout.addWidget(
+            qw.QLabel(
+                "Double click items to include/exclude them.\n"
+                "All subtypes of an asset are shuffled together.\n"
+                "If you want to keep some shuffled separately, "
+                "select them and click the lock button.",
+                wordWrap=True,
+            )
+        )
+
         self.texture_options(options_layout)
         self.sound_options(options_layout)
         self.text_options(options_layout)
@@ -173,8 +192,9 @@ class Window(qw.QWidget):
         parent.addWidget(group)
 
         self.texture_types = [*DEFAULT_TEXTURE_TYPES]
+        self.locked_texture_types = []
 
-        type_select = IncludeList([*TEXTURE_TYPES.keys()], self.texture_types)
+        type_select = IncludeList([*TEXTURE_TYPES.keys()], self.texture_types, self.locked_texture_types)
         layout.addRow(type_select)
 
         self.match_transparency = qw.QCheckBox("Match transparency")
@@ -207,9 +227,10 @@ class Window(qw.QWidget):
         layout = qw.QFormLayout(group)
         parent.addWidget(group)
 
-        self.sound_types = [*DEFAULT_SOUND_TYPES]
+        self.sound_types = [*SOUND_TYPES.keys()]
+        self.locked_sound_types = [*DEFAULT_LOCKED_SOUND_TYPES]
 
-        type_select = IncludeList([*SOUND_TYPES.keys()], self.sound_types)
+        type_select = IncludeList([*SOUND_TYPES.keys()], self.sound_types, self.locked_sound_types)
         layout.addRow(type_select)
 
 
@@ -218,9 +239,10 @@ class Window(qw.QWidget):
         layout = qw.QFormLayout(group)
         parent.addWidget(group)
 
-        self.text_types = [*DEFAULT_TEXT_TYPES]
+        self.text_types = []
+        self.locked_text_types = []
 
-        type_select = IncludeList([*TEXT_TYPES.keys()], self.text_types)
+        type_select = IncludeList([*TEXT_TYPES.keys()], self.text_types, self.locked_text_types)
         layout.addRow(type_select)
 
 
@@ -229,9 +251,10 @@ class Window(qw.QWidget):
         layout = qw.QFormLayout(group)
         parent.addWidget(group)
 
-        self.model_types = [*DEFAULT_MODEL_TYPES]
+        self.model_types = []
+        self.locked_model_types = []
 
-        type_select = IncludeList([*MODEL_TYPES.keys()], self.model_types)
+        type_select = IncludeList([*MODEL_TYPES.keys()], self.model_types, self.locked_model_types)
         layout.addRow(type_select)
 
 
@@ -329,9 +352,16 @@ class GenerateWorker(qc.QThread):
         self.pack_name = f"pack_{version_str}_{seed}.zip"
 
         texture_types = [t for label in self.win.texture_types for t in TEXTURE_TYPES[label]]
+        locked_texture_types = [t for label in self.win.locked_texture_types for t in TEXTURE_TYPES[label]]
+
         sound_types = [t for label in self.win.sound_types for t in SOUND_TYPES[label]]
+        locked_sound_types = [t for label in self.win.locked_sound_types for t in SOUND_TYPES[label]]
+
         text_types = [t for label in self.win.text_types for t in TEXT_TYPES[label]]
+        locked_text_types = [t for label in self.win.locked_text_types for t in TEXT_TYPES[label]]
+
         model_types = [t for label in self.win.model_types for t in MODEL_TYPES[label]]
+        locked_model_types = [t for label in self.win.locked_model_types for t in MODEL_TYPES[label]]
 
         # Cleanup
         self.step.emit(Step("Preparing download...", start=True))
@@ -398,10 +428,10 @@ class GenerateWorker(qc.QThread):
                 path = name[name.index("/") + 1:]
 
                 if (
-                    add_asset(path, "texture", RE_TEXTURE, texture_types, False) or
-                    add_asset(path, "sound", RE_SOUND, sound_types, False) or
-                    add_asset(path, "text", RE_TEXT, text_types, False) or
-                    add_asset(path, "model", RE_MODEL, model_types, False, RE_MODEL_BLACKLIST)
+                    add_asset(path, "texture", RE_TEXTURE, texture_types, locked_texture_types) or
+                    add_asset(path, "sound", RE_SOUND, sound_types, locked_sound_types) or
+                    add_asset(path, "text", RE_TEXT, text_types, locked_text_types) or
+                    add_asset(path, "model", RE_MODEL, model_types, locked_model_types, RE_MODEL_BLACKLIST)
                 ):
                     archive.extract(f)
                     target = os.path.dirname(path)

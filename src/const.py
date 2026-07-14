@@ -53,36 +53,17 @@ SOUND_TYPES = {
     "Tiles": ["tile"],
     "UI": ["ui"],
 }
-DEFAULT_SOUND_TYPES = [
-    "Ambient",
-    "Blocks",
-    "Damage",
-    "Digging",
-    "Enchanting",
-    "Entities",
-    "Events",
-    "Fire",
-    "Fireworks",
-    "Items",
-    "Liquids",
-    "Minecarts",
-    "Mobs",
-    "Notes",
-    "Portals",
-    "Random",
-    "Stepping",
-    "Tiles",
-    "UI",
+DEFAULT_LOCKED_SOUND_TYPES = [
+    "Music",
+    "Records"
 ]
 
 TEXT_TYPES = {
     "English (US)": ["en_us"],
     #"Splashes": ["splashes"]
 }
-DEFAULT_TEXT_TYPES = []
 
 MODEL_TYPES = {
     "Blocks": ["block"],
     "Items": ["item"]
 }
-DEFAULT_MODEL_TYPES = []
