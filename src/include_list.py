@@ -107,7 +107,8 @@ class IncludeList(qw.QWidget):
     def exclude_item(self, item):
         name = item.text().strip("🔒 ")
         self.selected.remove(name)
-        self.locked.remove(name)
+        if name in self.locked:
+            self.locked.remove(name)
         self.update_lists()
 
 
