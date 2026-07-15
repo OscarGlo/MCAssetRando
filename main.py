@@ -59,6 +59,10 @@ def get_seed() -> int:
     return int(time.time() * 1000) % MAX_SEED
 
 
+def get_resource_path(path: str) -> str:
+    return os.path.join(os.path.dirname(__file__), "resources", path)
+
+
 class Step:
     def __init__(self, desc: str, subtotal: int = 0, start: bool = False):
         self.desc = desc
@@ -76,7 +80,7 @@ class Window(qw.QWidget):
 
         self.layout = qw.QVBoxLayout(self)
 
-        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "resources", "icon.png")))
+        self.setWindowIcon(QIcon(get_resource_path("icon.png")))
         self.setWindowTitle(f"Minecraft Asset Randomizer {APP_VERSION}")
 
         # Randomizer options
@@ -597,12 +601,12 @@ class GenerateWorker(qc.QThread):
             pack.writestr("pack.mcmeta", json.dumps(meta))
 
             # Generate pack.png
-            tiles = Image.open("../resources/tiles.png")
-            icons = [tiles.crop((i, 0, i + 32, 32)) for i in range(0, 128, 32)]
-            small_num = [tiles.crop((i, 32, i + 10, 48)) for i in range(0, 100, 10)]
-            big_num = [tiles.crop((i, 48, i + 12, 80)) for i in range(0, 120, 12)]
-            dot = tiles.crop((120, 48, 128, 80))
-            mosaics = [tiles.crop((i, 80, i + 16, 96)) for i in range(0, 64, 16)]
+            with Image.open(get_resource_path("tiles.png")) as tiles:
+                icons = [tiles.crop((i, 0, i + 32, 32)) for i in range(0, 128, 32)]
+                small_num = [tiles.crop((i, 32, i + 10, 48)) for i in range(0, 100, 10)]
+                big_num = [tiles.crop((i, 48, i + 12, 80)) for i in range(0, 120, 12)]
+                dot = tiles.crop((120, 48, 128, 80))
+                mosaics = [tiles.crop((i, 80, i + 16, 96)) for i in range(0, 64, 16)]
 
             hue = random.random()
             bg = tuple(int(n * 255) for n in colorsys.hsv_to_rgb(math.fmod(hue - 0.1, 1), 0.5, 0.6))
