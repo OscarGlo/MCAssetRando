@@ -23,7 +23,7 @@ from src.util import transparency_amount, transfer_palette, colorize
 from src.versions import get_format, VERSIONS
 
 
-APP_VERSION = "1.1"
+APP_VERSION = "1.2"
 
 ROOT = "assets/minecraft/"
 RE_TEXTURE = rf"{ROOT}textures/(\w+)/.*?\.png$"
