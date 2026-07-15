@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import random
 import re
@@ -7,6 +8,7 @@ import sys
 import time
 import zipfile
 from zipfile import ZipFile
+import colorsys
 
 import pandas as pd
 import requests
@@ -17,7 +19,7 @@ import PySide6.QtWidgets as qw
 
 from src.const import DEFAULT_TEXTURE_TYPES, TEXTURE_TYPES, SOUND_TYPES, MODEL_TYPES, TEXT_TYPES, DEFAULT_LOCKED_SOUND_TYPES
 from src.include_list import IncludeList
-from src.util import transparency_amount, transfer_palette
+from src.util import transparency_amount, transfer_palette, colorize
 from src.versions import get_format, VERSIONS
 
 
@@ -558,8 +560,9 @@ class GenerateWorker(qc.QThread):
                 with transfer_palette(asset["new_path"], asset["path"], palette_size) as img:
                     img.save(asset["path"])
 
-        # Rename files
+        # Generate resource pack zip
         with zipfile.ZipFile(os.path.join("..", self.pack_name), "w") as pack:
+            # Rename files
             for (atype, subtype), group in assets.groupby(["type", "subtype"], dropna=False):
                 group_assets = list(group.iterrows())
                 self.step.emit(
@@ -578,6 +581,7 @@ class GenerateWorker(qc.QThread):
                     target = asset["path"] if pd.isna(asset["new_path"]) else asset["new_path"]
                     pack.write(asset["path"], target)
 
+            # Generate pack.mcmeta
             fmt = get_format(version)
             meta = {
                 "pack": {
@@ -591,6 +595,61 @@ class GenerateWorker(qc.QThread):
                 }
             }
             pack.writestr("pack.mcmeta", json.dumps(meta))
+
+            # Generate pack.png
+            tiles = Image.open("../resources/tiles.png")
+            icons = [tiles.crop((i, 0, i + 32, 32)) for i in range(0, 128, 32)]
+            small_num = [tiles.crop((i, 32, i + 10, 48)) for i in range(0, 100, 10)]
+            big_num = [tiles.crop((i, 48, i + 12, 80)) for i in range(0, 120, 12)]
+            dot = tiles.crop((120, 48, 128, 80))
+            mosaics = [tiles.crop((i, 80, i + 16, 96)) for i in range(0, 64, 16)]
+
+            hue = random.random()
+            bg = tuple(int(n * 255) for n in colorsys.hsv_to_rgb(math.fmod(hue - 0.1, 1), 0.5, 0.6))
+            fg = tuple(int(n * 255) for n in colorsys.hsv_to_rgb(math.fmod(hue + 0.1, 1), 0.5, 0.2))
+            fg_shadow = tuple(int(n * 255) for n in colorsys.hsv_to_rgb(math.fmod(hue + 0.05, 1), 0.4, 0.4))
+
+            with Image.new("RGB", (128, 128), bg) as icon:
+                for x in range(0, 128, 16):
+                    bg2 = tuple(int(n * 255) for n in colorsys.hsv_to_rgb(hue - 0.1 + x / (128 * 8), 0.5, 0.6))
+                    for y in range(0, 128, 16):
+                        t = mosaics[random.randint(0, len(mosaics) - 1)]
+                        tr = t.rotate(90 * random.randint(0, 3))
+                        icon.paste(colorize(tr, bg2), (x, y), tr)
+
+                with Image.new("RGBA", (128, 128), (0, 0, 0, 0)) as mask:
+                    mask.paste((0, 0, 0, 140), (0, 0, 128, 32))
+                    mask.paste((0, 0, 0, 140), (0, 80, 128, 128))
+                    icon.paste((bg[0], bg[1], bg[2]), (0, 0, 128, 128), mask)
+
+                with Image.new("RGBA", (128, 128)) as text:
+                    x = 0
+                    for i, t in enumerate([texture_types, sound_types, text_types, model_types]):
+                        if len(t) > 0:
+                            text.paste(icons[i], (x, 0))
+                            x += 32
+
+                    x = 4
+                    for c in version_str:
+                        if c == ".":
+                            text.paste(dot, (x - 2, 80))
+                            x += 7
+                            continue
+
+                        text.paste(big_num[int(c)], (x, 80))
+                        x += 14
+
+                    x = 3
+                    for c in str(seed):
+                        text.paste(small_num[int(c)], (x, 111))
+                        x += 10
+
+                    icon.paste(colorize(text, fg_shadow), (2, 1), text)
+                    icon.paste(colorize(text, fg), (0, 0), text)
+
+                icon.save("pack.png")
+
+            pack.write("pack.png")
 
         # Cleanup
         self.step.emit(Step("Cleaning up downloaded files..."))

@@ -48,3 +48,9 @@ def transfer_palette(source_path: str, target_path: str, size: int) -> Image.Ima
         result = target.quantize(colors=col_count, dither=Image.Dither.NONE)
         result.putpalette(quant_source.palette, rawmode="RGBA")
         return result
+
+
+def colorize(img: Image.Image, color: tuple[int, ...]) -> Image.Image:
+    colorized = Image.new("RGBA", img.size)
+    colorized.paste(color, (0, 0, img.size[0], img.size[1]), img)
+    return colorized
