@@ -17,7 +17,8 @@ from PySide6.QtGui import QIcon
 import PySide6.QtCore as qc
 import PySide6.QtWidgets as qw
 
-from src.const import DEFAULT_TEXTURE_TYPES, TEXTURE_TYPES, SOUND_TYPES, MODEL_TYPES, TEXT_TYPES, DEFAULT_LOCKED_SOUND_TYPES
+from src.const import DEFAULT_TEXTURE_TYPES, TEXTURE_TYPES, SOUND_TYPES, MODEL_TYPES, TEXT_TYPES, \
+    DEFAULT_LOCKED_SOUND_TYPES, LOOT_TABLES_TYPES, DATA_TYPES
 from src.include_list import IncludeList
 from src.util import transparency_amount, transfer_palette, colorize
 from src.versions import get_format, VERSIONS
@@ -25,11 +26,16 @@ from src.versions import get_format, VERSIONS
 
 APP_VERSION = "1.2"
 
-ROOT = "assets/minecraft/"
-RE_TEXTURE = rf"{ROOT}textures/(\w+)/.*?\.png$"
-RE_MODEL = rf"{ROOT}models/(\w+)/.*?\.json$"
-RE_TEXT = rf"{ROOT}(?:lang|texts)/(\w+)\.(?:lang|json|txt)$"
-RE_SOUND = rf"{ROOT}sounds/(\w+)/.*?\.ogg$"
+ROOT_ASSETS = "assets/minecraft/"
+RE_TEXTURE = rf"{ROOT_ASSETS}textures/(\w+)/.*?\.png$"
+RE_MODEL = rf"{ROOT_ASSETS}models/(\w+)/.*?\.json$"
+RE_TEXT = rf"{ROOT_ASSETS}(?:lang|texts)/(\w+)\.(?:lang|json|txt)$"
+RE_SOUND = rf"{ROOT_ASSETS}sounds/(\w+)/.*?\.ogg$"
+
+ROOT_DATA = "data/minecraft/"
+DATA_NAME = r"(.*?/)?[^_]\w*\.json$"
+RE_LOOT_TABLE = rf"{ROOT_DATA}loot_table/(\w+)/{DATA_NAME}"
+RE_DATA = rf"{ROOT_DATA}(dimension_type|recipe|villager_trade)/{DATA_NAME}"
 
 BLOCK_MODEL_BLACKLIST = [
     "block",
@@ -52,7 +58,7 @@ RE_MODEL_BLACKLIST = rf"(item/generated|block/({'|'.join(BLOCK_MODEL_BLACKLIST)}
 MAX_SEED = 2 ** 31 - 1
 
 BAR_COUNT = 1000
-STEP_COUNT = 9
+STEP_COUNT = 10
 STEP_SIZE = BAR_COUNT / STEP_COUNT
 
 def get_seed() -> int:
@@ -86,39 +92,24 @@ class Window(qw.QWidget):
 
         self.global_options(self.layout)
 
+        self.tabs = qw.QTabWidget(self)
+        self.tabs.setStyleSheet("QTabWidget::pane { border: 0; }")
+        self.layout.addWidget(self.tabs)
+
         # Randomizer options
-        options_scroll = qw.QScrollArea()
-        self.options = qw.QWidget()
-        options_layout = qw.QVBoxLayout(self.options)
-        options_layout.setSpacing(10)
-        options_scroll.setWidget(self.options)
-        options_scroll.setWidgetResizable(True)
-        self.layout.addWidget(options_scroll)
+        resourcepack_options, resourcepack_layout = self.make_options_layout()
+        self.texture_options(resourcepack_layout)
+        self.sound_options(resourcepack_layout)
+        self.text_options(resourcepack_layout)
+        self.model_options(resourcepack_layout)
+        self.tabs.addTab(resourcepack_options, "Resource pack")
 
-        type_help = qw.QWidget()
-        type_help_layout = qw.QHBoxLayout(type_help)
-        type_help_layout.setContentsMargins(0, 0, 0, 0)
-        options_layout.addWidget(type_help)
+        datapack_options, datapack_layout = self.make_options_layout()
+        self.loot_table_options(datapack_layout)
+        self.data_options(datapack_layout)
+        self.tabs.addTab(datapack_options, "Data pack")
 
-        type_help_icon = qw.QLabel(
-            pixmap=qw.QApplication.style().standardIcon(qw.QStyle.StandardPixmap.SP_MessageBoxInformation).pixmap(16, 16)
-        )
-        type_help_icon.setFixedWidth(20)
-        type_help_layout.addWidget(type_help_icon)
-        type_help_layout.addWidget(
-            qw.QLabel(
-                "Double click items to include/exclude them.\n"
-                "All subtypes of an asset are shuffled together.\n"
-                "If you want to keep some shuffled separately, "
-                "select them and click the lock button.",
-                wordWrap=True,
-            )
-        )
-
-        self.texture_options(options_layout)
-        self.sound_options(options_layout)
-        self.text_options(options_layout)
-        self.model_options(options_layout)
+        self.tabs.currentChanged.connect(self.on_change_tab)
 
         # Controls
         self.generate = qw.QPushButton("Generate resource pack")
@@ -146,6 +137,43 @@ class Window(qw.QWidget):
         self.footer()
 
 
+    def make_options_layout(self):
+        options_scroll = qw.QScrollArea()
+        options = qw.QWidget()
+        options_layout = qw.QVBoxLayout(options)
+        options_layout.setSpacing(10)
+        options_scroll.setWidget(options)
+        options_scroll.setWidgetResizable(True)
+
+        type_help = qw.QWidget()
+        type_help_layout = qw.QHBoxLayout(type_help)
+        type_help_layout.setContentsMargins(0, 0, 0, 0)
+        options_layout.addWidget(type_help)
+
+        type_help_icon = qw.QLabel(
+            pixmap=qw.QApplication.style()\
+                .standardIcon(qw.QStyle.StandardPixmap.SP_MessageBoxInformation)\
+                .pixmap(16, 16)
+        )
+        type_help_icon.setFixedWidth(20)
+        type_help_layout.addWidget(type_help_icon)
+        type_help_layout.addWidget(
+            qw.QLabel(
+                "Double click items to include/exclude them.\n"
+                "All subtypes of an asset are shuffled together.\n"
+                "If you want to keep some shuffled separately, "
+                "select them and click the lock button.",
+                wordWrap=True,
+            )
+        )
+
+        return options_scroll, options_layout
+
+
+    def on_change_tab(self, index: int):
+        self.generate.setText(f"Generate {"resource" if index == 0 else "data"} pack")
+
+
     def update_progress(self):
         if self.progress_subtotal == 0:
             self.progress_text.setText(self.progress_desc)
@@ -159,14 +187,14 @@ class Window(qw.QWidget):
             )
 
 
-    def progress_step(self, description, subtotal=0, start=False):
+    def progress_step(self, description: str, subtotal: int = 0, start: bool = False):
         self.progress_value = 0 if start else (self.progress_value + STEP_SIZE)
         self.progress_subtotal = subtotal
         self.progress_desc = description
         self.update_progress()
 
 
-    def progress_substep(self, subvalue):
+    def progress_substep(self, subvalue: int):
         self.progress_subvalue = subvalue
         self.update_progress()
 
@@ -185,7 +213,7 @@ class Window(qw.QWidget):
         version_layout.addWidget(self.version)
         version_layout.setStretch(0, 1)
 
-        self.cache_assets = qw.QCheckBox("Cache asset archive")
+        self.cache_assets = qw.QCheckBox("Cache downloaded assets")
         version_layout.addWidget(self.cache_assets)
 
         layout.addRow(qw.QLabel("Version"), version_inputs)
@@ -297,6 +325,49 @@ class Window(qw.QWidget):
         layout.addRow(type_select)
 
 
+    def loot_table_options(self, parent: qw.QLayout):
+        group = qw.QGroupBox("Loot tables")
+        layout = qw.QFormLayout(group)
+        parent.addWidget(group)
+
+        self.loot_table_types = [*LOOT_TABLES_TYPES.keys()]
+        self.locked_loot_table_types = []
+
+        type_select = IncludeList([*LOOT_TABLES_TYPES.keys()], self.loot_table_types, self.locked_loot_table_types)
+        layout.addRow(type_select)
+
+
+    def data_options(self, parent: qw.QLayout):
+        group = qw.QGroupBox("Other")
+        layout = qw.QFormLayout(group)
+        parent.addWidget(group)
+
+        info = qw.QWidget()
+        info_layout = qw.QHBoxLayout(info)
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(info)
+
+        info_icon = qw.QLabel(
+            pixmap=qw.QApplication.style() \
+                .standardIcon(qw.QStyle.StandardPixmap.SP_MessageBoxInformation) \
+                .pixmap(16, 16)
+        )
+        info_icon.setFixedWidth(20)
+        info_layout.addWidget(info_icon)
+        info_layout.addWidget(
+            qw.QLabel(
+                "These subtypes are grouped for convenience.\n"
+                "They are forced to be shuffled separately.",
+                wordWrap=True,
+            )
+        )
+
+        self.data_types = [*DATA_TYPES.keys()]
+
+        type_select = IncludeList([*DATA_TYPES.keys()], self.data_types, self.data_types)
+        layout.addRow(type_select)
+
+
     def footer(self):
         box = qw.QWidget()
         box.setFixedHeight(35)
@@ -331,8 +402,12 @@ class Window(qw.QWidget):
     def on_running(self, running: bool):
         self.running = running
         self.progress.setVisible(running)
-        self.options.setDisabled(running)
-        self.generate.setText("Cancel generation" if running else "Generate resource pack")
+        self.tabs.setDisabled(running)
+        resourcepack = self.tabs.currentIndex() == 0
+        self.generate.setText(
+            "Cancel generation" if running else
+            f"Generate {"resource" if resourcepack else "data"} pack"
+        )
 
     @qc.Slot()
     def on_seed(self, seed: int):
@@ -377,6 +452,14 @@ class GenerateWorker(qc.QThread):
         self.stopped = True
         self.running.emit(False)
 
+
+    @staticmethod
+    def get_types_locked(all_types: dict[str, list[str]], types: list[str], locked: list[str]):
+        return (
+            [t for label in types for t in all_types[label]],
+            [t for label in locked for t in all_types[label]]
+        )
+
     
     def run(self):
         self.running.emit(True)
@@ -389,24 +472,34 @@ class GenerateWorker(qc.QThread):
         else:
             seed = self.win.seed.value()
         random.seed(seed)
-        self.pack_name = f"pack_{version_str}_{seed}.zip"
+
+        resourcepack = self.win.tabs.currentIndex() == 0
+        self.pack_name = f"{"resource" if resourcepack else "data"}pack_{version_str}_{seed}.zip"
 
         cached_archive_name = f"assets_{version_str}.zip"
         has_cached = os.path.exists(cached_archive_name)
         use_cached = self.win.cache_assets.isChecked() or has_cached
         archive_name = cached_archive_name if use_cached else "assets.zip"
 
-        texture_types = [t for label in self.win.texture_types for t in TEXTURE_TYPES[label]]
-        locked_texture_types = [t for label in self.win.locked_texture_types for t in TEXTURE_TYPES[label]]
+        texture_types, locked_texture_types = self.get_types_locked(
+            TEXTURE_TYPES, self.win.texture_types, self.win.locked_texture_types
+        )
+        sound_types, locked_sound_types = self.get_types_locked(
+            SOUND_TYPES, self.win.sound_types, self.win.locked_sound_types
+        )
+        text_types, locked_text_types = self.get_types_locked(
+            TEXT_TYPES, self.win.text_types, self.win.locked_text_types
+        )
+        model_types, locked_model_types = self.get_types_locked(
+            MODEL_TYPES, self.win.model_types, self.win.locked_model_types
+        )
 
-        sound_types = [t for label in self.win.sound_types for t in SOUND_TYPES[label]]
-        locked_sound_types = [t for label in self.win.locked_sound_types for t in SOUND_TYPES[label]]
-
-        text_types = [t for label in self.win.text_types for t in TEXT_TYPES[label]]
-        locked_text_types = [t for label in self.win.locked_text_types for t in TEXT_TYPES[label]]
-
-        model_types = [t for label in self.win.model_types for t in MODEL_TYPES[label]]
-        locked_model_types = [t for label in self.win.locked_model_types for t in MODEL_TYPES[label]]
+        loot_table_types, locked_loot_table_types = self.get_types_locked(
+            LOOT_TABLES_TYPES, self.win.loot_table_types, self.win.locked_loot_table_types
+        )
+        data_types, locked_data_types = self.get_types_locked(
+            DATA_TYPES, self.win.data_types, self.win.data_types
+        )
 
         # Cleanup
         self.step.emit(Step("Preparing download...", start=True))
@@ -477,10 +570,17 @@ class GenerateWorker(qc.QThread):
                 path = name[name.index("/") + 1:]
 
                 if (
-                    add_asset(path, "texture", RE_TEXTURE, texture_types, locked_texture_types) or
-                    add_asset(path, "sound", RE_SOUND, sound_types, locked_sound_types) or
-                    add_asset(path, "text", RE_TEXT, text_types, locked_text_types) or
-                    add_asset(path, "model", RE_MODEL, model_types, locked_model_types, RE_MODEL_BLACKLIST)
+                    resourcepack and (
+                        add_asset(path, "texture", RE_TEXTURE, texture_types, locked_texture_types) or
+                        add_asset(path, "sound", RE_SOUND, sound_types, locked_sound_types) or
+                        add_asset(path, "text", RE_TEXT, text_types, locked_text_types) or
+                        add_asset(path, "model", RE_MODEL, model_types, locked_model_types, RE_MODEL_BLACKLIST)
+                    )
+                ) or (
+                    not resourcepack and (
+                        add_asset(path, "loot_table", RE_LOOT_TABLE, loot_table_types, locked_loot_table_types) or
+                        add_asset(path, "data", RE_DATA, data_types, locked_data_types)
+                    )
                 ):
                     archive.extract(f)
                     target = os.path.dirname(path)
@@ -575,13 +675,48 @@ class GenerateWorker(qc.QThread):
                         else:
                             f.writelines([ts["new_value"] + "\n" for _, ts in content.iterrows()])
 
+        # Shuffle strings
+        if "recipe" in data_types:
+            self.step.emit(Step("Shuffling recipe results..."))
+
+            recipes = pd.DataFrame({
+                "path": pd.Series(dtype=str),
+                "content": pd.Series(dtype=str),
+                "output": pd.Series(dtype=str),
+            })
+
+            for _, recipe in assets[assets["subtype"] == "recipe"].iterrows():
+                path = recipe["path"]
+                with open(path, encoding="utf-8") as f:
+                    content = json.load(f)
+
+                if not "result" in content:
+                    continue
+
+                df = pd.DataFrame({
+                    "content": [content],
+                    "result": [content["result"]],
+                    "path": [path]
+                })
+                recipes = pd.concat([recipes, df], ignore_index=True)
+
+            if not recipes.empty:
+                recipes["new_result"] = (
+                    recipes.sample(frac=1, random_state=seed).reset_index().set_index(recipes.index)["result"]
+                )
+
+                for _, recipe in recipes.iterrows():
+                    with open(recipe["path"], "w", encoding="utf-8") as f:
+                        json.dump({**recipe["content"], "result": recipe["new_result"]}, f, indent=2)
+
+
         # Shuffle assets
         self.step.emit(Step("Shuffling assets..."))
         criterion = ["type", "subtype"]
         if self.win.match_transparency.isChecked():
             criterion.append("transparency")
 
-        to_shuffle = assets[assets["type"] != "text"]
+        to_shuffle = assets[(assets["type"] != "text") & (assets["subtype"] != "recipe")]
         if not to_shuffle.empty:
             shuffled = pd.concat(
                 group.sample(frac=1, random_state=seed).reset_index().set_index(group.index)
@@ -590,19 +725,19 @@ class GenerateWorker(qc.QThread):
             shuffled["new_path"] = shuffled["path"]
             assets = assets.join(shuffled[["new_path"]])
 
-        # Transfer palettes
-        if self.win.keep_palette.isChecked():
-            palette_size = self.win.palette_size.value()
-            textures = list(assets[assets["type"] == "texture"].iterrows())
-            self.step.emit(Step(f"Transferring palettes...", len(textures)))
-            for i, (_, asset) in enumerate(textures):
-                if self.stopped:
-                    self.clean(True)
-                    return
+            # Transfer palettes
+            if self.win.keep_palette.isChecked():
+                palette_size = self.win.palette_size.value()
+                textures = list(assets[assets["type"] == "texture"].iterrows())
+                self.step.emit(Step(f"Transferring palettes...", len(textures)))
+                for i, (_, asset) in enumerate(textures):
+                    if self.stopped:
+                        self.clean(True)
+                        return
 
-                self.substep.emit(i)
-                with transfer_palette(asset["new_path"], asset["path"], palette_size) as img:
-                    img.save(asset["path"])
+                    self.substep.emit(i)
+                    with transfer_palette(asset["new_path"], asset["path"], palette_size) as img:
+                        img.save(asset["path"])
 
         # Generate resource pack zip
         with zipfile.ZipFile(os.path.join("..", self.pack_name), "w") as pack:
@@ -622,7 +757,8 @@ class GenerateWorker(qc.QThread):
                         return
 
                     self.substep.emit(i)
-                    target = asset["path"] if pd.isna(asset["new_path"]) else asset["new_path"]
+                    has_new_path = "new_path" in asset and not pd.isna(asset["new_path"])
+                    target = asset["new_path"] if has_new_path else asset["path"]
                     pack.write(asset["path"], target)
 
             # Generate pack.mcmeta
@@ -668,10 +804,11 @@ class GenerateWorker(qc.QThread):
 
                 with Image.new("RGBA", (128, 128)) as text:
                     x = 0
-                    for i, t in enumerate([texture_types, sound_types, text_types, model_types]):
-                        if len(t) > 0:
-                            text.paste(icons[i], (x, 0))
-                            x += 32
+                    if resourcepack:
+                        for i, t in enumerate([texture_types, sound_types, text_types, model_types]):
+                            if len(t) > 0:
+                                text.paste(icons[i], (x, 0))
+                                x += 32
 
                     x = 4
                     for c in version_str:

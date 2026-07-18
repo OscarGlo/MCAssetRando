@@ -70,3 +70,26 @@ MODEL_TYPES = {
     "Blocks": ["block"],
     "Items": ["item"]
 }
+
+LOOT_TABLES_TYPES = {
+    "Archeology": ["archaeology"],
+    "Blocks": ["blocks"],
+    "Brush": ["brush"],
+    "Carve": ["carve"],
+    "Charged creeper": ["charged_creeper"],
+    "Chests": ["chests"],
+    "Dispensers": ["dispensers"],
+    "Entities": ["entities"],
+    "Equipment": ["equipment"],
+    "Gameplay": ["gameplay"],
+    "Harvest": ["harvest"],
+    "Pots": ["pots"],
+    "Shearing": ["shearing"],
+    "Spawners": ["spawners"],
+}
+
+DATA_TYPES = {
+    # "Dimensions": ["dimension_type"],
+    "Recipes": ["recipe"],
+    # "Villager trades": ["villager_trade"],
+}
