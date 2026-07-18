@@ -79,9 +79,12 @@ class Window(qw.QWidget):
         self.running = False
 
         self.layout = qw.QVBoxLayout(self)
+        self.layout.setSpacing(20)
 
         self.setWindowIcon(QIcon(get_resource_path("icon.png")))
         self.setWindowTitle(f"Minecraft Asset Randomizer {APP_VERSION}")
+
+        self.global_options(self.layout)
 
         # Randomizer options
         options_scroll = qw.QScrollArea()
@@ -92,10 +95,9 @@ class Window(qw.QWidget):
         options_scroll.setWidgetResizable(True)
         self.layout.addWidget(options_scroll)
 
-        self.global_options(options_layout)
-
         type_help = qw.QWidget()
         type_help_layout = qw.QHBoxLayout(type_help)
+        type_help_layout.setContentsMargins(0, 0, 0, 0)
         options_layout.addWidget(type_help)
 
         type_help_icon = qw.QLabel(
@@ -119,8 +121,6 @@ class Window(qw.QWidget):
         self.model_options(options_layout)
 
         # Controls
-        self.layout.addSpacing(20)
-
         self.generate = qw.QPushButton("Generate resource pack")
         self.generate.setStyleSheet("font-size: 16px; padding: 8px")
         self.generate.clicked.connect(self.on_generate_clicked)
@@ -176,18 +176,35 @@ class Window(qw.QWidget):
         layout = qw.QFormLayout(group)
         parent.addWidget(group)
 
+        version_inputs = qw.QWidget()
+        version_layout = qw.QHBoxLayout(version_inputs)
+        version_layout.setContentsMargins(0, 0, 0, 0)
+
         self.version = qw.QComboBox()
         self.version.addItems([".".join([str(n) for n in v]) for v in VERSIONS])
-        layout.addRow(qw.QLabel("Version"), self.version)
+        version_layout.addWidget(self.version)
+        version_layout.setStretch(0, 1)
+
+        self.cache_assets = qw.QCheckBox("Cache asset archive")
+        version_layout.addWidget(self.cache_assets)
+
+        layout.addRow(qw.QLabel("Version"), version_inputs)
+
+        seed_inputs = qw.QWidget()
+        seed_layout = qw.QHBoxLayout(seed_inputs)
+        seed_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.seed = qw.QSpinBox(minimum=0, maximum=MAX_SEED, value=get_seed())
+        self.seed.setDisabled(True)
+        seed_layout.addWidget(self.seed)
+        seed_layout.setStretch(0, 1)
 
         self.rand_seed = qw.QCheckBox("Randomize seed")
         self.rand_seed.setChecked(True)
         self.rand_seed.stateChanged.connect(self.on_rand_seed_checked)
-        layout.addRow(self.rand_seed)
+        seed_layout.addWidget(self.rand_seed)
 
-        self.seed = qw.QSpinBox(minimum=0, maximum=MAX_SEED, value=get_seed())
-        self.seed.setDisabled(True)
-        layout.addRow(qw.QLabel("Seed"), self.seed)
+        layout.addRow(qw.QLabel("Seed"), seed_inputs)
 
 
     def on_rand_seed_checked(self, checked):
@@ -205,21 +222,35 @@ class Window(qw.QWidget):
         type_select = IncludeList([*TEXTURE_TYPES.keys()], self.texture_types, self.locked_texture_types)
         layout.addRow(type_select)
 
+        transparency_inputs = qw.QWidget()
+        transparency_layout = qw.QHBoxLayout(transparency_inputs)
+        transparency_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.transparency_bins = qw.QSpinBox(minimum=2, maximum=16, value=8)
+        transparency_layout.addWidget(self.transparency_bins)
+        transparency_layout.setStretch(0, 1)
+
         self.match_transparency = qw.QCheckBox("Match transparency")
         self.match_transparency.setChecked(True)
         self.match_transparency.stateChanged.connect(self.match_transparency_changed)
-        layout.addRow(self.match_transparency)
+        transparency_layout.addWidget(self.match_transparency)
 
-        self.transparency_bins = qw.QSpinBox(minimum=2, maximum=16, value=8)
-        layout.addRow(qw.QLabel("Transparency bins"), self.transparency_bins)
+        layout.addRow(qw.QLabel("Transparency levels"), transparency_inputs)
 
-        self.keep_palette = qw.QCheckBox("Keep color palette")
-        self.keep_palette.stateChanged.connect(self.keep_palette_changed)
-        layout.addRow(self.keep_palette)
+        palette_inputs = qw.QWidget()
+        palette_layout = qw.QHBoxLayout(palette_inputs)
+        palette_layout.setContentsMargins(0, 0, 0, 0)
 
         self.palette_size = qw.QSpinBox(minimum=2, maximum=64, value=16)
         self.palette_size.setDisabled(True)
-        layout.addRow(qw.QLabel("Palette size"), self.palette_size)
+        palette_layout.addWidget(self.palette_size)
+        palette_layout.setStretch(0, 1)
+
+        self.keep_palette = qw.QCheckBox("Keep color palette")
+        self.keep_palette.stateChanged.connect(self.keep_palette_changed)
+        palette_layout.addWidget(self.keep_palette)
+
+        layout.addRow(qw.QLabel("Palette size"), palette_inputs)
 
 
     def match_transparency_changed(self, checked):
@@ -360,6 +391,11 @@ class GenerateWorker(qc.QThread):
         random.seed(seed)
         self.pack_name = f"pack_{version_str}_{seed}.zip"
 
+        cached_archive_name = f"assets_{version_str}.zip"
+        has_cached = os.path.exists(cached_archive_name)
+        use_cached = self.win.cache_assets.isChecked() or has_cached
+        archive_name = cached_archive_name if use_cached else "assets.zip"
+
         texture_types = [t for label in self.win.texture_types for t in TEXTURE_TYPES[label]]
         locked_texture_types = [t for label in self.win.locked_texture_types for t in TEXTURE_TYPES[label]]
 
@@ -377,13 +413,17 @@ class GenerateWorker(qc.QThread):
         self.clean(True)
 
         # Download asset pack
-        self.step.emit(Step(f"Downloading assets for version {version_str}..."))
-        url = f"https://api.github.com/repos/InventivetalentDev/minecraft-assets/zipball/tags/{version_str}"
-        with requests.get(url) as r, open("assets.zip", "wb") as f:
-            if self.stopped:
-                self.clean(True)
-                return
-            f.write(r.content)
+        if not has_cached:
+            self.step.emit(Step(f"Downloading assets for version {version_str}..."))
+
+            url = f"https://api.github.com/repos/InventivetalentDev/minecraft-assets/zipball/tags/{version_str}"
+            with requests.get(url) as r, open(archive_name, "wb") as f:
+                if self.stopped:
+                    self.clean(True)
+                    return
+                f.write(r.content)
+        else:
+            self.step.emit(Step(f"Using cached assets assets for version {version_str}"))
 
         # Extract assets
         assets = pd.DataFrame({
@@ -419,7 +459,7 @@ class GenerateWorker(qc.QThread):
 
             return False
 
-        with ZipFile("assets.zip", "r") as archive:
+        with ZipFile(archive_name, "r") as archive:
             if not os.path.exists("assets"):
                 os.mkdir("assets")
             os.chdir("assets")
