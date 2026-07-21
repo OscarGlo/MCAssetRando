@@ -1,6 +1,5 @@
 # TODO
 
-* Don't rerender all list items
 * Use local assets if available
 * Randomize extra data pack types
 * Separate recipe types

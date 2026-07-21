@@ -65,18 +65,14 @@ class IncludeList(qw.QWidget):
         self.included_list.itemDoubleClicked.connect(self.exclude_item)
         included_layout.addWidget(self.included_list)
 
-        self.update_lists()
-
-    def update_lists(self):
-        self.included_list.clear()
-        self.excluded_list.clear()
-
         for label in self.items:
             item = qw.QListWidgetItem()
+
             if label in self.locked:
-                item.setText("🔒 " + label)
+                item.setText(label + " 🔒")
             else:
                 item.setText(label)
+
             if label in self.selected:
                 self.included_list.addItem(item)
             else:
@@ -88,20 +84,31 @@ class IncludeList(qw.QWidget):
             name = item.text().strip("🔒 ")
             if name in self.locked:
                 self.locked.remove(name)
+                item.setText(name)
             else:
                 self.locked.append(name)
-        self.update_lists()
+                item.setText(name + " 🔒")
 
 
     def include_item(self, item):
         self.selected.append(item.text().strip("🔒 "))
-        self.update_lists()
+
+        self.excluded_list.takeItem(self.excluded_list.row(item))
+        self.included_list.addItem(item)
+
+        self.included_list.sortItems()
+        self.excluded_list.sortItems()
 
 
     def include_all_clicked(self):
         self.selected.clear()
         self.selected.extend(self.items)
-        self.update_lists()
+
+        self.included_list.addItems([item.text() for item in self.excluded_list.findItems('', qc.Qt.MatchFlag.MatchContains)])
+        self.excluded_list.clear()
+
+        self.included_list.sortItems()
+        self.excluded_list.sortItems()
 
 
     def exclude_item(self, item):
@@ -109,10 +116,21 @@ class IncludeList(qw.QWidget):
         self.selected.remove(name)
         if name in self.locked:
             self.locked.remove(name)
-        self.update_lists()
+
+        item.setText(name)
+        self.included_list.takeItem(self.included_list.row(item))
+        self.excluded_list.addItem(item)
+
+        self.included_list.sortItems()
+        self.excluded_list.sortItems()
 
 
     def exclude_all_clicked(self):
         self.selected.clear()
         self.locked.clear()
-        self.update_lists()
+
+        self.excluded_list.addItems([item.text() for item in self.included_list.findItems('', qc.Qt.MatchFlag.MatchContains)])
+        self.included_list.clear()
+
+        self.included_list.sortItems()
+        self.excluded_list.sortItems()
