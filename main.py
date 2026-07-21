@@ -97,17 +97,17 @@ class Window(qw.QWidget):
         self.layout.addWidget(self.tabs)
 
         # Randomizer options
-        resourcepack_options, resourcepack_layout = self.make_options_layout()
+        self.resourcepack_options, resourcepack_layout = self.make_options_layout()
         self.texture_options(resourcepack_layout)
         self.sound_options(resourcepack_layout)
         self.text_options(resourcepack_layout)
         self.model_options(resourcepack_layout)
-        self.tabs.addTab(resourcepack_options, "Resource pack")
+        self.tabs.addTab(self.resourcepack_options, "Resource pack")
 
-        datapack_options, datapack_layout = self.make_options_layout()
+        self.datapack_options, datapack_layout = self.make_options_layout()
         self.loot_table_options(datapack_layout)
         self.data_options(datapack_layout)
-        self.tabs.addTab(datapack_options, "Data pack")
+        self.tabs.addTab(self.datapack_options, "Data pack")
 
         self.tabs.currentChanged.connect(self.on_change_tab)
 
@@ -402,7 +402,9 @@ class Window(qw.QWidget):
     def on_running(self, running: bool):
         self.running = running
         self.progress.setVisible(running)
-        self.tabs.setDisabled(running)
+        self.resourcepack_options.widget().setDisabled(running)
+        self.datapack_options.widget().setDisabled(running)
+        self.tabs.tabBar().setDisabled(running)
         resourcepack = self.tabs.currentIndex() == 0
         self.generate.setText(
             "Cancel generation" if running else
