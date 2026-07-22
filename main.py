@@ -27,7 +27,7 @@ pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
 
 
-APP_VERSION = "1.3"
+APP_VERSION = "1.4"
 
 ROOT_ASSETS = "assets/minecraft/"
 RE_TEXTURE = rf"{ROOT_ASSETS}textures/(\w+)/.*?\.png$"
