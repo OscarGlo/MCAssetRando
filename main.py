@@ -18,7 +18,7 @@ import PySide6.QtCore as qc
 import PySide6.QtWidgets as qw
 
 from src.const import DEFAULT_TEXTURE_TYPES, TEXTURE_TYPES, SOUND_TYPES, MODEL_TYPES, TEXT_TYPES, \
-    DEFAULT_LOCKED_SOUND_TYPES, LOOT_TABLES_TYPES, DATA_TYPES
+    DEFAULT_LOCKED_SOUND_TYPES, LOOT_TABLES_TYPES, RECIPE_TYPES
 from src.include_list import IncludeList
 from src.util import transparency_amount, transfer_palette, colorize
 from src.versions import get_format, VERSIONS
@@ -35,7 +35,8 @@ RE_SOUND = rf"{ROOT_ASSETS}sounds/(\w+)/.*?\.ogg$"
 ROOT_DATA = "data/minecraft/"
 DATA_NAME = r"(.*?/)?[^_]\w*\.json$"
 RE_LOOT_TABLE = rf"{ROOT_DATA}loot_table/(\w+)/{DATA_NAME}"
-RE_DATA = rf"{ROOT_DATA}(dimension_type|recipe|villager_trade)/{DATA_NAME}"
+RE_RECIPE = rf"{ROOT_DATA}recipe/{DATA_NAME}"
+# RE_DATA = rf"{ROOT_DATA}(dimension_type|villager_trade)/{DATA_NAME}"
 
 BLOCK_MODEL_BLACKLIST = [
     "block",
@@ -106,7 +107,7 @@ class Window(qw.QWidget):
 
         self.datapack_options, datapack_layout = self.make_options_layout()
         self.loot_table_options(datapack_layout)
-        self.data_options(datapack_layout)
+        self.recipe_options(datapack_layout)
         self.tabs.addTab(self.datapack_options, "Data pack")
 
         self.tabs.currentChanged.connect(self.on_change_tab)
@@ -337,35 +338,47 @@ class Window(qw.QWidget):
         layout.addRow(type_select)
 
 
-    def data_options(self, parent: qw.QLayout):
-        group = qw.QGroupBox("Other")
+    def recipe_options(self, parent: qw.QLayout):
+        group = qw.QGroupBox("Recipes")
         layout = qw.QFormLayout(group)
         parent.addWidget(group)
 
-        info = qw.QWidget()
-        info_layout = qw.QHBoxLayout(info)
-        info_layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(info)
+        self.recipe_types = [*RECIPE_TYPES.keys()]
+        self.locked_recipe_types = []
 
-        info_icon = qw.QLabel(
-            pixmap=qw.QApplication.style() \
-                .standardIcon(qw.QStyle.StandardPixmap.SP_MessageBoxInformation) \
-                .pixmap(16, 16)
-        )
-        info_icon.setFixedWidth(20)
-        info_layout.addWidget(info_icon)
-        info_layout.addWidget(
-            qw.QLabel(
-                "These subtypes are grouped for convenience.\n"
-                "They are forced to be shuffled separately.",
-                wordWrap=True,
-            )
-        )
-
-        self.data_types = [*DATA_TYPES.keys()]
-
-        type_select = IncludeList([*DATA_TYPES.keys()], self.data_types, self.data_types)
+        type_select = IncludeList([*RECIPE_TYPES.keys()], self.recipe_types, self.locked_recipe_types)
         layout.addRow(type_select)
+
+
+    # def data_options(self, parent: qw.QLayout):
+    #     group = qw.QGroupBox("Other")
+    #     layout = qw.QFormLayout(group)
+    #     parent.addWidget(group)
+    #
+    #     info = qw.QWidget()
+    #     info_layout = qw.QHBoxLayout(info)
+    #     info_layout.setContentsMargins(0, 0, 0, 0)
+    #     layout.addWidget(info)
+    #
+    #     info_icon = qw.QLabel(
+    #         pixmap=qw.QApplication.style() \
+    #             .standardIcon(qw.QStyle.StandardPixmap.SP_MessageBoxInformation) \
+    #             .pixmap(16, 16)
+    #     )
+    #     info_icon.setFixedWidth(20)
+    #     info_layout.addWidget(info_icon)
+    #     info_layout.addWidget(
+    #         qw.QLabel(
+    #             "These subtypes are grouped for convenience.\n"
+    #             "They are forced to be shuffled separately.",
+    #             wordWrap=True,
+    #         )
+    #     )
+    #
+    #     self.data_types = [*DATA_TYPES.keys()]
+    #
+    #     type_select = IncludeList([*DATA_TYPES.keys()], self.data_types, self.data_types)
+    #     layout.addRow(type_select)
 
 
     def footer(self):
@@ -499,9 +512,12 @@ class GenerateWorker(qc.QThread):
         loot_table_types, locked_loot_table_types = self.get_types_locked(
             LOOT_TABLES_TYPES, self.win.loot_table_types, self.win.locked_loot_table_types
         )
-        data_types, locked_data_types = self.get_types_locked(
-            DATA_TYPES, self.win.data_types, self.win.data_types
+        recipe_types, locked_recipe_types = self.get_types_locked(
+            RECIPE_TYPES, self.win.recipe_types, self.win.locked_recipe_types
         )
+        # data_types, locked_data_types = self.get_types_locked(
+        #     DATA_TYPES, self.win.data_types, self.win.data_types
+        # )
 
         # Cleanup
         self.step.emit(Step("Preparing download...", start=True))
@@ -581,7 +597,7 @@ class GenerateWorker(qc.QThread):
                 ) or (
                     not resourcepack and (
                         add_asset(path, "loot_table", RE_LOOT_TABLE, loot_table_types, locked_loot_table_types) or
-                        add_asset(path, "data", RE_DATA, data_types, locked_data_types)
+                        add_asset(path, "recipe", RE_RECIPE, len(recipe_types) > 0)
                     )
                 ):
                     archive.extract(f)
@@ -677,35 +693,44 @@ class GenerateWorker(qc.QThread):
                         else:
                             f.writelines([ts["new_value"] + "\n" for _, ts in content.iterrows()])
 
-        # Shuffle strings
-        if "recipe" in data_types:
+        # Shuffle recipes
+        if recipe_types:
             self.step.emit(Step("Shuffling recipe results..."))
 
             recipes = pd.DataFrame({
                 "path": pd.Series(dtype=str),
                 "content": pd.Series(dtype=str),
+                "type": pd.Series(dtype=str),
                 "output": pd.Series(dtype=str),
             })
 
-            for _, recipe in assets[assets["subtype"] == "recipe"].iterrows():
+            for i, recipe in assets[assets["type"] == "recipe"].iterrows():
                 path = recipe["path"]
                 with open(path, encoding="utf-8") as f:
                     content = json.load(f)
 
-                if not "result" in content:
+                recipe_type = content["type"][10:]
+                if recipe_type not in recipe_types or "result" not in content:
+                    assets.drop([i], inplace=True)
                     continue
 
+                if recipe_type in locked_recipe_types:
+                    recipe_type = None
+
                 df = pd.DataFrame({
+                    "path": [path],
                     "content": [content],
+                    "type": [recipe_type],
                     "result": [content["result"]],
-                    "path": [path]
                 })
                 recipes = pd.concat([recipes, df], ignore_index=True)
 
             if not recipes.empty:
-                recipes["new_result"] = (
-                    recipes.sample(frac=1, random_state=seed).reset_index().set_index(recipes.index)["result"]
+                shuffled_recipes = pd.concat(
+                    group.sample(frac=1, random_state=seed).reset_index().set_index(group.index)
+                    for _, group in recipes.groupby("type", dropna=False)
                 )
+                recipes["new_result"] = shuffled_recipes["result"]
 
                 for _, recipe in recipes.iterrows():
                     with open(recipe["path"], "w", encoding="utf-8") as f:
@@ -718,7 +743,7 @@ class GenerateWorker(qc.QThread):
         if self.win.match_transparency.isChecked():
             criterion.append("transparency")
 
-        to_shuffle = assets[(assets["type"] != "text") & (assets["subtype"] != "recipe")]
+        to_shuffle = assets[~(assets["type"].isin(["text", "recipe"]))]
         if not to_shuffle.empty:
             shuffled = pd.concat(
                 group.sample(frac=1, random_state=seed).reset_index().set_index(group.index)
@@ -780,11 +805,12 @@ class GenerateWorker(qc.QThread):
 
             # Generate pack.png
             with Image.open(get_resource_path("tiles.png")) as tiles:
-                icons = [tiles.crop((i, 0, i + 32, 32)) for i in range(0, 128, 32)]
-                small_num = [tiles.crop((i, 32, i + 10, 48)) for i in range(0, 100, 10)]
-                big_num = [tiles.crop((i, 48, i + 12, 80)) for i in range(0, 120, 12)]
-                dot = tiles.crop((120, 48, 128, 80))
-                mosaics = [tiles.crop((i, 80, i + 16, 96)) for i in range(0, 64, 16)]
+                icons_rp = [tiles.crop((i, 0, i + 32, 32)) for i in range(0, 128, 32)]
+                icons_dp = [tiles.crop((i, 32, i + 32, 64)) for i in range(0, 64, 32)]
+                small_num = [tiles.crop((i, 64, i + 10, 80)) for i in range(0, 100, 10)]
+                big_num = [tiles.crop((i, 80, i + 12, 112)) for i in range(0, 120, 12)]
+                dot = tiles.crop((120, 80, 128, 112))
+                mosaics = [tiles.crop((i, 112, i + 16, 128)) for i in range(0, 64, 16)]
 
             hue = random.random()
             bg = tuple(int(n * 255) for n in colorsys.hsv_to_rgb(math.fmod(hue - 0.1, 1), 0.5, 0.6))
@@ -809,7 +835,12 @@ class GenerateWorker(qc.QThread):
                     if resourcepack:
                         for i, t in enumerate([texture_types, sound_types, text_types, model_types]):
                             if len(t) > 0:
-                                text.paste(icons[i], (x, 0))
+                                text.paste(icons_rp[i], (x, 0))
+                                x += 32
+                    else:
+                        for i, t in enumerate([loot_table_types, recipe_types]):
+                            if len(t) > 0:
+                                text.paste(icons_dp[i], (x, 0))
                                 x += 32
 
                     x = 4

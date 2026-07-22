@@ -88,8 +88,18 @@ LOOT_TABLES_TYPES = {
     "Spawners": ["spawners"],
 }
 
-DATA_TYPES = {
-    # "Dimensions": ["dimension_type"],
-    "Recipes": ["recipe"],
-    # "Villager trades": ["villager_trade"],
+RECIPE_TYPES = {
+    "Blasting": ["blasting"],
+    "Campfire cooking": ["campfire_cooking"],
+    "Crafting (shaped)": ["crafting_imbue", "crafting_shaped"],
+    "Crafting (shapeless)": ["crafting_dye", "crafting_shapeless", "crafting_transmute"],
+    "Smelting": ["smelting"],
+    "Smithing": ["smithing", "smithing_transform"],
+    "Smoking": ["smoking"],
+    "Stonecutting": ["stonecutting"],
 }
+
+# DATA_TYPES = {
+#     "Dimensions": ["dimension_type"],
+#     "Villager trades": ["villager_trade"],
+# }
