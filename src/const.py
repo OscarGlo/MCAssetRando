@@ -99,7 +99,13 @@ RECIPE_TYPES = {
     "Stonecutting": ["stonecutting"],
 }
 
-# DATA_TYPES = {
-#     "Dimensions": ["dimension_type"],
-#     "Villager trades": ["villager_trade"],
-# }
+WORLDGEN_TYPES = {
+    "Biomes": ["biome"],
+    "Noise": ["noise"],
+    "Structures": ["structure"],
+}
+
+DATA_TYPES = {
+    # "Dimensions": ["dimension_type"],
+    # "Villager trades": ["villager_trade"],
+}

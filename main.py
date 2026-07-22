@@ -18,10 +18,13 @@ import PySide6.QtCore as qc
 import PySide6.QtWidgets as qw
 
 from src.const import DEFAULT_TEXTURE_TYPES, TEXTURE_TYPES, SOUND_TYPES, MODEL_TYPES, TEXT_TYPES, \
-    DEFAULT_LOCKED_SOUND_TYPES, LOOT_TABLES_TYPES, RECIPE_TYPES
+    DEFAULT_LOCKED_SOUND_TYPES, LOOT_TABLES_TYPES, RECIPE_TYPES, DATA_TYPES, WORLDGEN_TYPES
 from src.include_list import IncludeList
 from src.util import transparency_amount, transfer_palette, colorize
 from src.versions import get_format, VERSIONS
+
+pd.set_option('display.max_columns', None)
+pd.set_option('display.width', None)
 
 
 APP_VERSION = "1.3"
@@ -36,7 +39,8 @@ ROOT_DATA = "data/minecraft/"
 DATA_NAME = r"(.*?/)?[^_]\w*\.json$"
 RE_LOOT_TABLE = rf"{ROOT_DATA}loot_table/(\w+)/{DATA_NAME}"
 RE_RECIPE = rf"{ROOT_DATA}recipe/{DATA_NAME}"
-# RE_DATA = rf"{ROOT_DATA}(dimension_type|villager_trade)/{DATA_NAME}"
+RE_WORLDGEN = rf"{ROOT_DATA}worldgen/(\w+)/{DATA_NAME}"
+RE_DATA = rf"{ROOT_DATA}(dimension_type|villager_trade|worldgen/\w+)/{DATA_NAME}"
 
 BLOCK_MODEL_BLACKLIST = [
     "block",
@@ -68,6 +72,18 @@ def get_seed() -> int:
 
 def get_resource_path(path: str) -> str:
     return os.path.join(os.path.dirname(__file__), "resources", path)
+
+
+def shuffle_column(df: pd.DataFrame, name: str, seed: int, group: str | list[str] | None = None) -> pd.DataFrame:
+    if group is None:
+        shuffled = df.sample(frac=1, random_state=seed).reset_index().set_index(df.index)
+    else:
+        shuffled = pd.concat(
+            group.sample(frac=1, random_state=seed).reset_index().set_index(group.index)
+            for _, group in df.groupby(group, dropna=False)
+        )
+    new_name = f"new_{name}"
+    return shuffled.rename(columns={name: new_name})[[new_name]]
 
 
 class Step:
@@ -108,6 +124,8 @@ class Window(qw.QWidget):
         self.datapack_options, datapack_layout = self.make_options_layout()
         self.loot_table_options(datapack_layout)
         self.recipe_options(datapack_layout)
+        self.worldgen_options(datapack_layout)
+        # self.data_options(datapack_layout)
         self.tabs.addTab(self.datapack_options, "Data pack")
 
         self.tabs.currentChanged.connect(self.on_change_tab)
@@ -349,6 +367,33 @@ class Window(qw.QWidget):
         type_select = IncludeList([*RECIPE_TYPES.keys()], self.recipe_types, self.locked_recipe_types)
         layout.addRow(type_select)
 
+    def worldgen_options(self, parent: qw.QLayout):
+        group = qw.QGroupBox("World generation")
+        layout = qw.QFormLayout(group)
+        parent.addWidget(group)
+        info = qw.QWidget()
+        info_layout = qw.QHBoxLayout(info)
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(info)
+        info_icon = qw.QLabel(
+            pixmap=qw.QApplication.style() \
+                .standardIcon(qw.QStyle.StandardPixmap.SP_MessageBoxInformation) \
+                .pixmap(16, 16)
+        )
+        info_icon.setFixedWidth(20)
+        info_layout.addWidget(info_icon)
+        info_layout.addWidget(
+            qw.QLabel(
+                "These subtypes are grouped for convenience.\n"
+                "They are always shuffled separately.",
+                wordWrap=True,
+            )
+        )
+
+        self.worldgen_types = []
+        type_select = IncludeList([*WORLDGEN_TYPES.keys()], self.worldgen_types, self.worldgen_types)
+        layout.addRow(type_select)
+
 
     # def data_options(self, parent: qw.QLayout):
     #     group = qw.QGroupBox("Other")
@@ -370,7 +415,7 @@ class Window(qw.QWidget):
     #     info_layout.addWidget(
     #         qw.QLabel(
     #             "These subtypes are grouped for convenience.\n"
-    #             "They are forced to be shuffled separately.",
+    #             "They are always shuffled separately.",
     #             wordWrap=True,
     #         )
     #     )
@@ -515,6 +560,9 @@ class GenerateWorker(qc.QThread):
         recipe_types, locked_recipe_types = self.get_types_locked(
             RECIPE_TYPES, self.win.recipe_types, self.win.locked_recipe_types
         )
+        worldgen_types, locked_worldgen_types = self.get_types_locked(
+            WORLDGEN_TYPES, self.win.worldgen_types, self.win.worldgen_types
+        )
         # data_types, locked_data_types = self.get_types_locked(
         #     DATA_TYPES, self.win.data_types, self.win.data_types
         # )
@@ -589,15 +637,17 @@ class GenerateWorker(qc.QThread):
 
                 if (
                     resourcepack and (
-                        add_asset(path, "texture", RE_TEXTURE, texture_types, locked_texture_types) or
-                        add_asset(path, "sound", RE_SOUND, sound_types, locked_sound_types) or
-                        add_asset(path, "text", RE_TEXT, text_types, locked_text_types) or
-                        add_asset(path, "model", RE_MODEL, model_types, locked_model_types, RE_MODEL_BLACKLIST)
+                        add_asset(path, "texture", RE_TEXTURE, texture_types, locked_texture_types)
+                        or add_asset(path, "sound", RE_SOUND, sound_types, locked_sound_types)
+                        or add_asset(path, "text", RE_TEXT, text_types, locked_text_types)
+                        or add_asset(path, "model", RE_MODEL, model_types, locked_model_types, RE_MODEL_BLACKLIST)
                     )
                 ) or (
                     not resourcepack and (
-                        add_asset(path, "loot_table", RE_LOOT_TABLE, loot_table_types, locked_loot_table_types) or
-                        add_asset(path, "recipe", RE_RECIPE, len(recipe_types) > 0)
+                        add_asset(path, "loot_table", RE_LOOT_TABLE, loot_table_types, locked_loot_table_types)
+                        or add_asset(path, "recipe", RE_RECIPE, len(recipe_types) > 0)
+                        or add_asset(path, "worldgen", RE_WORLDGEN, worldgen_types, locked_worldgen_types)
+                        # or add_asset(path, "data", RE_DATA, data_types, locked_data_types)
                     )
                 ):
                     archive.extract(f)
@@ -678,11 +728,7 @@ class GenerateWorker(qc.QThread):
             )
 
             if not strings.empty:
-                shuffled_values = pd.concat(
-                    group.sample(frac=1, random_state=seed).reset_index().set_index(group.index)
-                    for _, group in strings.groupby("placeholders")
-                )
-                strings["new_value"] = shuffled_values["value"]
+                strings["new_value"] = shuffle_column(strings, "value", seed, "placeholders")
 
                 for path, content in strings.groupby("path"):
                     with open(path, "w", encoding="utf-8") as f:
@@ -726,15 +772,82 @@ class GenerateWorker(qc.QThread):
                 recipes = pd.concat([recipes, df], ignore_index=True)
 
             if not recipes.empty:
-                shuffled_recipes = pd.concat(
-                    group.sample(frac=1, random_state=seed).reset_index().set_index(group.index)
-                    for _, group in recipes.groupby("type", dropna=False)
-                )
-                recipes["new_result"] = shuffled_recipes["result"]
+                recipes["new_result"] = shuffle_column(recipes, "result", seed, "type")
 
                 for _, recipe in recipes.iterrows():
                     with open(recipe["path"], "w", encoding="utf-8") as f:
                         json.dump({**recipe["content"], "result": recipe["new_result"]}, f, indent=2)
+
+        # Randomize biome properties
+        if "biome" in worldgen_types:
+            properties = [
+                "carvers",
+                "downfall",
+                "effects",
+                "features",
+                "has_precipitation",
+                "spawners",
+                "temperature",
+            ]
+            biomes = pd.DataFrame({
+                "path": pd.Series(dtype=str),
+                "content": pd.Series(dtype=str),
+                **{p: pd.Series(dtype=str) for p in properties}
+            })
+
+            for i, biome in assets[assets["subtype"] == "biome"].iterrows():
+                path = biome["path"]
+                with open(path, encoding="utf-8") as f:
+                    content = json.load(f)
+
+                df = pd.DataFrame({
+                    "path": [path],
+                    "content": [content],
+                    **{p: [content[p]] for p in properties},
+                })
+                biomes = pd.concat([biomes, df], ignore_index=True)
+
+            if not biomes.empty:
+                for p in properties:
+                    biomes[f"new_{p}"] = shuffle_column(biomes, p, seed)
+
+                for _, biome in biomes.iterrows():
+                    with open(biome["path"], "w", encoding="utf-8") as f:
+                        json.dump({
+                            **biome["content"],
+                            **{p: biome[f"new_{p}"] for p in properties}
+                        }, f, indent=2)
+
+
+        # Randomize structure properties
+        if "structure" in worldgen_types:
+            structures = pd.DataFrame({
+                "path": pd.Series(dtype=str),
+                "content": pd.Series(dtype=str),
+                "biomes": pd.Series(dtype=str)
+            })
+
+            for i, struct in assets[assets["subtype"] == "structure"].iterrows():
+                path = struct["path"]
+                with open(path, encoding="utf-8") as f:
+                    content = json.load(f)
+
+                df = pd.DataFrame({
+                    "path": [path],
+                    "content": [content],
+                    "biomes": [content["biomes"]],
+                })
+                structures = pd.concat([structures, df], ignore_index=True)
+
+            if not structures.empty:
+                structures[f"new_biomes"] = shuffle_column(structures, "biomes", seed)
+
+                for _, struct in structures.iterrows():
+                    with open(struct["path"], "w", encoding="utf-8") as f:
+                        json.dump({
+                            **struct["content"],
+                            "biomes": struct["new_biomes"],
+                        }, f, indent=2)
 
 
         # Shuffle assets
@@ -743,14 +856,12 @@ class GenerateWorker(qc.QThread):
         if self.win.match_transparency.isChecked():
             criterion.append("transparency")
 
-        to_shuffle = assets[~(assets["type"].isin(["text", "recipe"]))]
+        to_shuffle = assets[
+            ~(assets["type"].isin(["text", "recipe"])) &
+            ~(assets["subtype"].isin(["biome", "structure"]))
+        ]
         if not to_shuffle.empty:
-            shuffled = pd.concat(
-                group.sample(frac=1, random_state=seed).reset_index().set_index(group.index)
-                for _, group in to_shuffle.groupby(criterion, dropna=False)
-            )
-            shuffled["new_path"] = shuffled["path"]
-            assets = assets.join(shuffled[["new_path"]])
+            assets = assets.join(shuffle_column(to_shuffle, "path", seed, criterion))
 
             # Transfer palettes
             if self.win.keep_palette.isChecked():
@@ -806,7 +917,7 @@ class GenerateWorker(qc.QThread):
             # Generate pack.png
             with Image.open(get_resource_path("tiles.png")) as tiles:
                 icons_rp = [tiles.crop((i, 0, i + 32, 32)) for i in range(0, 128, 32)]
-                icons_dp = [tiles.crop((i, 32, i + 32, 64)) for i in range(0, 64, 32)]
+                icons_dp = [tiles.crop((i, 32, i + 32, 64)) for i in range(0, 96, 32)]
                 small_num = [tiles.crop((i, 64, i + 10, 80)) for i in range(0, 100, 10)]
                 big_num = [tiles.crop((i, 80, i + 12, 112)) for i in range(0, 120, 12)]
                 dot = tiles.crop((120, 80, 128, 112))
@@ -838,7 +949,7 @@ class GenerateWorker(qc.QThread):
                                 text.paste(icons_rp[i], (x, 0))
                                 x += 32
                     else:
-                        for i, t in enumerate([loot_table_types, recipe_types]):
+                        for i, t in enumerate([loot_table_types, recipe_types, worldgen_types]):
                             if len(t) > 0:
                                 text.paste(icons_dp[i], (x, 0))
                                 x += 32
