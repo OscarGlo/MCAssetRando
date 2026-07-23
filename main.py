@@ -22,6 +22,7 @@ from src.const import DEFAULT_TEXTURE_TYPES, TEXTURE_TYPES, SOUND_TYPES, MODEL_T
 from src.include_list import IncludeList
 from src.util import transparency_amount, transfer_palette, colorize
 from src.versions import get_format, VERSIONS
+from versions import RESOURCEPACK_FORMATS, DATAPACK_FORMATS
 
 pd.set_option('display.max_columns', None)
 pd.set_option('display.width', None)
@@ -900,12 +901,14 @@ class GenerateWorker(qc.QThread):
                     pack.write(asset["path"], target)
 
             # Generate pack.mcmeta
-            fmt = get_format(version)
+            formats = RESOURCEPACK_FORMATS if resourcepack else DATAPACK_FORMATS
+            fmt = get_format(formats, version)
+            fmt_arr = [int(n) for n in str(fmt).split(".")]
             meta = {
                 "pack": {
                     "pack_format": fmt,
-                    "min_format": [fmt, 0],
-                    "max_format": [fmt, 0],
+                    "min_format": fmt_arr,
+                    "max_format": fmt_arr,
                     "description": [
                         "Randomly shuffled assets!\n",
                         {"text": f"Seed: {seed}", "color": "gray", "italic": True}

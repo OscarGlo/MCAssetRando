@@ -114,7 +114,7 @@ VERSIONS = [
 ]
 
 
-PACK_FORMATS = {
+RESOURCEPACK_FORMATS = {
     88: [26, 2],
     84: [26, 1],
     75: [1, 21, 11],
@@ -142,9 +142,34 @@ PACK_FORMATS = {
     1: [1, 6, 1],
 }
 
+DATAPACK_FORMATS = {
+    107.1: [26, 2],
+    101.1: [26, 1],
+    94.1: [1, 21, 11],
+    88: [1, 21, 9],
+    81: [1, 21, 7],
+    80: [1, 21, 6],
+    71: [1, 21, 5],
+    61: [1, 21, 4],
+    57: [1, 21, 2],
+    48: [1, 21],
+    41: [1, 20, 5],
+    26: [1, 20, 3],
+    18: [1, 20, 2],
+    15: [1, 20],
+    12: [1, 19, 4],
+    10: [1, 19],
+    9: [1, 18, 2],
+    8: [1, 18],
+    7: [1, 17],
+    6: [1, 16, 2],
+    5: [1, 15],
+    4: [1, 13],
+}
 
-def get_format(version: list[int]) -> int:
-    for fmt, min_version in PACK_FORMATS.items():
+
+def get_format(formats: dict[int, list[int]], version: list[int]) -> float:
+    for fmt, min_version in formats.items():
         if compare_versions(version, min_version) >= 0:
             return fmt
     return 0
