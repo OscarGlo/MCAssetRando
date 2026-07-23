@@ -3,7 +3,7 @@ import PySide6.QtWidgets as qw
 
 
 class IncludeList(qw.QWidget):
-    def __init__(self, items: list[str], selected: list[str], locked: list[str]):
+    def __init__(self, items: list[str], selected: list[str], locked: list[str] | None = None):
         super().__init__()
 
         self.items = items
@@ -40,10 +40,11 @@ class IncludeList(qw.QWidget):
         include_all.clicked.connect(self.include_all_clicked)
         controls_layout.addWidget(include_all)
 
-        lock = qw.QPushButton("🔒")
-        lock.setFixedSize(30, 30)
-        lock.clicked.connect(self.toggle_lock)
-        controls_layout.addWidget(lock)
+        if self.locked is not None:
+            lock = qw.QPushButton("🔒")
+            lock.setFixedSize(30, 30)
+            lock.clicked.connect(self.toggle_lock)
+            controls_layout.addWidget(lock)
 
         exclude_all = qw.QPushButton("❰")
         exclude_all.setFixedSize(30, 30)
@@ -67,13 +68,11 @@ class IncludeList(qw.QWidget):
 
         for label in self.items:
             item = qw.QListWidgetItem()
-
-            if label in self.locked:
-                item.setText(label + " 🔒")
-            else:
-                item.setText(label)
+            item.setText(label)
 
             if label in self.selected:
+                if self.locked is None or label in self.locked:
+                    item.setText(label + " 🔒")
                 self.included_list.addItem(item)
             else:
                 self.excluded_list.addItem(item)
@@ -91,7 +90,10 @@ class IncludeList(qw.QWidget):
 
 
     def include_item(self, item):
-        self.selected.append(item.text().strip("🔒 "))
+        self.selected.append(item.text())
+
+        if self.locked is None:
+            item.setText(item.text() + " 🔒")
 
         self.excluded_list.takeItem(self.excluded_list.row(item))
         self.included_list.addItem(item)
@@ -104,7 +106,12 @@ class IncludeList(qw.QWidget):
         self.selected.clear()
         self.selected.extend(self.items)
 
-        self.included_list.addItems([item.text() for item in self.excluded_list.findItems('', qc.Qt.MatchFlag.MatchContains)])
+        suffix = ""
+        if self.locked is None:
+            suffix = " 🔒"
+
+        items = self.excluded_list.findItems('', qc.Qt.MatchFlag.MatchContains)
+        self.included_list.addItems([item.text() + suffix for item in items])
         self.excluded_list.clear()
 
         self.included_list.sortItems()
@@ -114,7 +121,7 @@ class IncludeList(qw.QWidget):
     def exclude_item(self, item):
         name = item.text().strip("🔒 ")
         self.selected.remove(name)
-        if name in self.locked:
+        if self.locked is not None and name in self.locked:
             self.locked.remove(name)
 
         item.setText(name)
@@ -127,9 +134,11 @@ class IncludeList(qw.QWidget):
 
     def exclude_all_clicked(self):
         self.selected.clear()
-        self.locked.clear()
+        if self.locked is not None:
+            self.locked.clear()
 
-        self.excluded_list.addItems([item.text() for item in self.included_list.findItems('', qc.Qt.MatchFlag.MatchContains)])
+        items = self.included_list.findItems('', qc.Qt.MatchFlag.MatchContains)
+        self.excluded_list.addItems([item.text().strip("🔒 ") for item in items])
         self.included_list.clear()
 
         self.included_list.sortItems()

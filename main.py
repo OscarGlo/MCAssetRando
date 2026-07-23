@@ -18,7 +18,7 @@ import PySide6.QtCore as qc
 import PySide6.QtWidgets as qw
 
 from src.const import DEFAULT_TEXTURE_TYPES, TEXTURE_TYPES, SOUND_TYPES, MODEL_TYPES, TEXT_TYPES, \
-    DEFAULT_LOCKED_SOUND_TYPES, LOOT_TABLES_TYPES, RECIPE_TYPES, DATA_TYPES, WORLDGEN_TYPES
+    DEFAULT_LOCKED_SOUND_TYPES, LOOT_TABLES_TYPES, RECIPE_TYPES, WORLDGEN_TYPES
 from src.include_list import IncludeList
 from src.util import transparency_amount, transfer_palette, colorize
 from src.versions import get_format, VERSIONS
@@ -392,7 +392,7 @@ class Window(qw.QWidget):
         )
 
         self.worldgen_types = []
-        type_select = IncludeList([*WORLDGEN_TYPES.keys()], self.worldgen_types, self.worldgen_types)
+        type_select = IncludeList([*WORLDGEN_TYPES.keys()], self.worldgen_types)
         layout.addRow(type_select)
 
 
@@ -423,7 +423,7 @@ class Window(qw.QWidget):
     #
     #     self.data_types = [*DATA_TYPES.keys()]
     #
-    #     type_select = IncludeList([*DATA_TYPES.keys()], self.data_types, self.data_types)
+    #     type_select = IncludeList([*DATA_TYPES.keys()], self.data_types)
     #     layout.addRow(type_select)
 
 
